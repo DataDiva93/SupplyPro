@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>global.GitHubIntegration</api_name><caller_access/><client_callable>false</client_callable><description/><mobile_callable>false</mobile_callable><name>GitHubIntegration</name><script><![CDATA[var GitHubIntegration = Class.create();
+GitHubIntegration.prototype = {
+    initialize: function () {
+        this.githubUser = "datadiva93"; // GitHub username
+        this.githubApiBase = "https://api.github.com";
+        this.midServerName = "Da_lab_Midserver"; // Your specified MID Server
+    },
+
+    /**
+     * ]]>🔐<![CDATA[ Determine which GitHub PAT to use based on update set name
+     */
+    getAuthToken: function (updateSetName) {
+        var isAzure = updateSetName && updateSetName.startsWith("AZ_");
+        var tokenKey = isAzure ? "x_github_integration.azure_pat" : "x_github_integration.repo_pat";
+        return gs.getProperty(tokenKey);
+    },
+
+    /**
+     * ]]>🔧<![CDATA[ Get update set name from sys_id
+     */
+    getUpdateSetName: function (sysId) {
+        var gr = new GlideRecord("sys_update_set");
+        if (gr.get(sysId)) {
+            return gr.name;
+        }
+        return null;
+    },
+
+    /**
+     * ]]>🧹<![CDATA[ Format the update set name for GitHub repo naming
+     * Applies AZ- prefix if needed and strips unsafe characters
+     */
+    formatRepoName: function (updateSetName) {
+        var isAzure = updateSetName && updateSetName.startsWith("AZ_");
+        var cleanedName = updateSetName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+        if (isAzure && !cleanedName.startsWith("AZ-")) {
+            cleanedName = "AZ-" + cleanedName.replace(/^AZ_/, "");
+        }
+        return cleanedName;
+    },
+
+    /**
+     * ]]>🔍<![CDATA[ Check if a GitHub repository already exists
+     */
+    repoExists: function (repoName, token) {
+        var url = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName;
+        var request = new sn_ws.RESTMessageV2();
+        request.setHttpMethod("GET");
+        request.setEndpoint(url);
+        request.setBasicAuth(this.githubUser, token);
+        request.setMIDServer(this.midServerName);
+
+        var response = request.execute();
+        return response.getStatusCode() === 200;
+    },
+
+    /**
+     * ]]>📦<![CDATA[ Create a GitHub repository
+     */
+    createRepo: function (sysId) {
+        var updateSetName = this.getUpdateSetName(sysId);
+        if (!updateSetName) {
+            gs.error("Error: Update Set not found for sys_id " + sysId);
+            return false;
+        }
+
+        var token = this.getAuthToken(updateSetName);
+        var repoName = this.formatRepoName(updateSetName);
+
+        var url = this.githubApiBase + "/user/repos";
+        var request = new sn_ws.RESTMessageV2();
+        request.setHttpMethod("POST");
+        request.setEndpoint(url);
+        request.setBasicAuth(this.githubUser, token);
+        request.setRequestHeader("Content-Type", "application/json");
+        request.setMIDServer(this.midServerName);
+
+        var body = JSON.stringify({
+            name: repoName,
+            description: "ServiceNow Update Set - " + updateSetName,
+            private: false,
+            auto_init: true,
+            license_template: "mit",
+            gitignore_template: "Node"
+        });
+
+        request.setRequestBody(body);
+        var response = request.execute();
+        gs.info("GitHub Repo Creation Response: " + response.getBody());
+
+        return response.getStatusCode() === 201;
+    },
+
+    /**
+     * ]]>🌿<![CDATA[ Create a new branch in a GitHub repository
+     */
+    createBranch: function (inputValue, branchName) {
+        var repoName, updateSetName;
+
+        if (inputValue.startsWith("SN_") || inputValue.length === 32) {
+            updateSetName = this.getUpdateSetName(inputValue);
+            if (!updateSetName) {
+                gs.error("Error: Update Set not found for sys_id " + inputValue);
+                return false;
+            }
+            repoName = this.formatRepoName(updateSetName);
+        } else {
+            repoName = inputValue;
+            updateSetName = inputValue;
+        }
+
+        var token = this.getAuthToken(updateSetName);
+
+        if (!this.repoExists(repoName, token)) {
+            gs.error("Repository " + repoName + " does not exist. Creating...");
+            if (!this.createRepo(inputValue)) {
+                gs.error("Failed to create repository. Cannot proceed with branch creation.");
+                return false;
+            }
+        }
+
+        var url = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName + "/git/refs";
+        var request = new sn_ws.RESTMessageV2();
+        request.setHttpMethod("GET");
+        request.setEndpoint(url);
+        request.setBasicAuth(this.githubUser, token);
+        request.setMIDServer(this.midServerName);
+
+        var response = request.execute();
+        if (response.getStatusCode() !== 200) {
+            gs.error("Error fetching branch references: " + response.getBody());
+            return false;
+        }
+
+        var responseBody = JSON.parse(response.getBody());
+        var sha = null;
+        for (var i = 0; i < responseBody.length; i++) {
+            if (responseBody[i].ref.endsWith("main") || responseBody[i].ref.endsWith("master")) {
+                sha = responseBody[i].object.sha;
+                break;
+            }
+        }
+        if (!sha && responseBody.length > 0) {
+            sha = responseBody[0].object.sha;
+        }
+        if (!sha) {
+            gs.error("No valid branch found to create a new branch from.");
+            return false;
+        }
+
+        var createBranchUrl = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName + "/git/refs";
+        var createBranchRequest = new sn_ws.RESTMessageV2();
+        createBranchRequest.setHttpMethod("POST");
+        createBranchRequest.setEndpoint(createBranchUrl);
+        createBranchRequest.setBasicAuth(this.githubUser, token);
+        createBranchRequest.setRequestHeader("Content-Type", "application/json");
+        createBranchRequest.setMIDServer(this.midServerName);
+
+        var requestBody = JSON.stringify({
+            ref: "refs/heads/" + branchName,
+            sha: sha
+        });
+
+        createBranchRequest.setRequestBody(requestBody);
+        var createResponse = createBranchRequest.execute();
+
+        if (createResponse.getStatusCode() === 201) {
+            gs.info("Branch " + branchName + " created successfully in repository " + repoName);
+            return true;
+        } else {
+            gs.error("Error creating branch: " + createResponse.getBody());
+            return false;
+        }
+    },
+
+    /**
+     * ]]>📤<![CDATA[ Commit an update set's records to GitHub
+     */
+    commitUpdateSet: function (sysId) {
+        var updateSetName = this.getUpdateSetName(sysId);
+        if (!updateSetName) {
+            gs.error("Error: Update Set not found for sys_id " + sysId);
+            return false;
+        }
+
+        var token = this.getAuthToken(updateSetName);
+        var repoName = this.formatRepoName(updateSetName);
+        var branchName = "update-set-" + updateSetName.replace(/\s+/g, "-");
+
+        if (!this.repoExists(repoName, token)) {
+            this.createRepo(sysId);
+        }
+
+        this.createBranch(repoName, branchName);
+
+        var gr = new GlideRecord("sys_update_xml");
+        gr.addQuery("update_set", sysId);
+        gr.query();
+
+        while (gr.next()) {
+            var filePath = gr.name + ".xml";
+            var fileContent = gr.payload.toString();
+            var success = this.commitFile(repoName, filePath, fileContent, token);
+            if (success) {
+                gs.info("Committed file: " + filePath);
+            } else {
+                gs.error("Failed to commit file: " + filePath);
+            }
+        }
+
+        return true;
+    },
+
+    /**
+     * ]]>📄<![CDATA[ Commit a file to a GitHub repository
+     */
+    commitFile: function (repoName, filePath, fileContent, token) {
+        var url = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName + "/contents/" + filePath;
+        var request = new sn_ws.RESTMessageV2();
+        request.setHttpMethod("PUT");
+        request.setEndpoint(url);
+        request.setBasicAuth(this.githubUser, token);
+        request.setRequestHeader("Content-Type", "application/json");
+        request.setMIDServer(this.midServerName);
+
+        var encodedContent = GlideStringUtil.base64Encode(fileContent);
+
+        var body = JSON.stringify({
+            message: "ServiceNow update set commit",
+            content: encodedContent
+        });
+
+        request.setRequestBody(body);
+        var response = request.execute();
+        return response.getStatusCode() === 201 || response.getStatusCode() === 200;
+    },
+
+    type: "GitHubIntegration"
+};
+]]></script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>45c524848318621071c492b6feaad3a7</sys_id><sys_mod_count>12</sys_mod_count><sys_name>GitHubIntegration</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_45c524848318621071c492b6feaad3a7</sys_update_name><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-05-02 11:03:55</sys_updated_on></sys_script_include><sys_es_latest_script action="INSERT_OR_UPDATE"><id>45c524848318621071c492b6feaad3a7</id><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>0d76288483d4621071c492b6feaad31a</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-03-10 09:53:42</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>
