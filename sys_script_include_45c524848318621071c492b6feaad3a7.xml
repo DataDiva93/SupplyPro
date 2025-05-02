@@ -214,27 +214,53 @@ GitHubIntegration.prototype = {
     /**
      * ]]>📄<![CDATA[ Commit a file to a GitHub repository
      */
-    commitFile: function (repoName, filePath, fileContent, token) {
-        var url = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName + "/contents/" + filePath;
-        var request = new sn_ws.RESTMessageV2();
-        request.setHttpMethod("PUT");
-        request.setEndpoint(url);
-        request.setBasicAuth(this.githubUser, token);
-        request.setRequestHeader("Content-Type", "application/json");
-        request.setMIDServer(this.midServerName);
+	commitFile: function (repoName, filePath, fileContent, token) {
+    var url = this.githubApiBase + "/repos/" + this.githubUser + "/" + repoName + "/contents/" + filePath;
 
-        var encodedContent = GlideStringUtil.base64Encode(fileContent);
+    var request = new sn_ws.RESTMessageV2();
+    request.setHttpMethod("GET");
+    request.setEndpoint(url);
+    request.setBasicAuth(this.githubUser, token);
+    request.setMIDServer(this.midServerName);
 
-        var body = JSON.stringify({
-            message: "ServiceNow update set commit",
-            content: encodedContent
-        });
+    var sha = null;
+    var getResponse = request.execute();
+    if (getResponse.getStatusCode() === 200) {
+        var existingFile = JSON.parse(getResponse.getBody());
+        sha = existingFile.sha;
+    }
 
-        request.setRequestBody(body);
-        var response = request.execute();
-        return response.getStatusCode() === 201 || response.getStatusCode() === 200;
-    },
+    // Now construct the PUT request
+    var putRequest = new sn_ws.RESTMessageV2();
+    putRequest.setHttpMethod("PUT");
+    putRequest.setEndpoint(url);
+    putRequest.setBasicAuth(this.githubUser, token);
+    putRequest.setRequestHeader("Content-Type", "application/json");
+    putRequest.setMIDServer(this.midServerName);
 
+    var encodedContent = GlideStringUtil.base64Encode(fileContent);
+
+    var body = {
+        message: "ServiceNow update set commit",
+        content: encodedContent
+    };
+
+    if (sha) {
+        body.sha = sha; // needed for file updates
+    }
+
+    putRequest.setRequestBody(JSON.stringify(body));
+
+    var putResponse = putRequest.execute();
+    var status = putResponse.getStatusCode();
+
+    if (status !== 201 && status !== 200) {
+        gs.error("❌ GitHub API commit failed for file: " + filePath + ". Status: " + status + " - " + putResponse.getBody());
+    }
+
+    return status === 201 || status === 200;
+},
     type: "GitHubIntegration"
 };
-]]></script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>45c524848318621071c492b6feaad3a7</sys_id><sys_mod_count>12</sys_mod_count><sys_name>GitHubIntegration</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_45c524848318621071c492b6feaad3a7</sys_update_name><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-05-02 11:03:55</sys_updated_on></sys_script_include><sys_es_latest_script action="INSERT_OR_UPDATE"><id>45c524848318621071c492b6feaad3a7</id><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>0d76288483d4621071c492b6feaad31a</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-03-10 09:53:42</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>
+
+]]></script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>45c524848318621071c492b6feaad3a7</sys_id><sys_mod_count>13</sys_mod_count><sys_name>GitHubIntegration</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_45c524848318621071c492b6feaad3a7</sys_update_name><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-05-02 16:45:34</sys_updated_on></sys_script_include><sys_es_latest_script action="INSERT_OR_UPDATE"><id>45c524848318621071c492b6feaad3a7</id><sys_created_by>data.diva</sys_created_by><sys_created_on>2025-03-10 09:53:42</sys_created_on><sys_id>0d76288483d4621071c492b6feaad31a</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-03-10 09:53:42</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>
