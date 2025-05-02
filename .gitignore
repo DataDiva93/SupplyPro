@@ -134,3 +134,13 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Block system property XML files that may contain secrets
+sys_properties_*github*pat*.xml
+sys_properties_*token*.xml
+sys_properties_*secret*.xml
+sys_properties_*apikey*.xml
+sys_properties_*password*.xml
+
+# Optional: block all system properties if you're unsure
+# sys_properties_*.xml
