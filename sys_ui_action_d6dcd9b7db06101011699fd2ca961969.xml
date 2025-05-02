@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="10fa2a96dbbf001011699fd2ca9619e5" table="sys_ui_action"><sys_ui_action action="INSERT_OR_UPDATE"><action_name>commit_to_git</action_name><active>true</active><client>true</client><client_script_v2><![CDATA[function onClick(g_form) {
+
+}]]></client_script_v2><comments>current.application == "global" &amp;&amp; current.state =="complete"</comments><condition/><form_action>true</form_action><form_button>true</form_button><form_button_v2>false</form_button_v2><form_context_menu>false</form_context_menu><form_link>false</form_link><form_menu_button_v2>false</form_menu_button_v2><form_style>primary</form_style><format_for_configurable_workspace>false</format_for_configurable_workspace><hint/><isolate_script>false</isolate_script><list_action>false</list_action><list_banner_button>false</list_banner_button><list_button>false</list_button><list_choice>false</list_choice><list_context_menu>false</list_context_menu><list_link>false</list_link><list_save_with_form_button>false</list_save_with_form_button><list_style/><messages/><name>Commit to GIT</name><onclick>commitDialog();</onclick><order>100</order><script><![CDATA[function commitDialog() {
+    var comments = prompt("Enter commit comments:");
+    if (!comments) {
+        alert("Commit canceled.");
+        return;
+    }
+
+    var aj = new GlideAjax("GitHubIntegrationAjax"); // Call new Script Include
+    aj.addParam("sysparm_name", "commitToGitHub");
+    aj.addParam("sysparm_sys_id", g_form.getUniqueValue());
+    aj.addParam("sysparm_comments", comments);
+    aj.getXML(AjaxGetResult);
+}
+
+function AjaxGetResult(response) {
+    var answer = response.responseXML.documentElement.getAttribute("answer");
+    if (answer) {
+        alert(answer);
+    }
+}
+
+action.setRedirectURL(current);
+]]></script><show_insert>false</show_insert><show_multiple_update>false</show_multiple_update><show_query>false</show_query><show_update>true</show_update><sys_class_name>sys_ui_action</sys_class_name><sys_created_by>Rahul</sys_created_by><sys_created_on>2020-07-23 15:41:33</sys_created_on><sys_domain>10fa2a96dbbf001011699fd2ca9619e5</sys_domain><sys_domain_path/><sys_id>d6dcd9b7db06101011699fd2ca961969</sys_id><sys_mod_count>26</sys_mod_count><sys_name>Commit to GIT</sys_name><sys_overrides/><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_ui_action_d6dcd9b7db06101011699fd2ca961969</sys_update_name><sys_updated_by>data.diva</sys_updated_by><sys_updated_on>2025-03-10 23:08:14</sys_updated_on><table>sys_update_set</table><ui11_compatible>true</ui11_compatible><ui16_compatible>false</ui16_compatible></sys_ui_action><sys_es_latest_script action="INSERT_OR_UPDATE"><id>d6dcd9b7db06101011699fd2ca961969</id><sys_created_by>eric.lemonnier</sys_created_by><sys_created_on>2025-02-03 22:44:21</sys_created_on><sys_id>383787b8c32f16102e00dd777d0131f9</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>eric.lemonnier</sys_updated_by><sys_updated_on>2025-02-03 22:44:21</sys_updated_on><table>sys_ui_action</table><use_es_latest>false</use_es_latest></sys_es_latest_script></record_update>
